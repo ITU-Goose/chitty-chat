@@ -17,6 +17,9 @@ func GetLamportTimeStamp() LamportTimestamp {
 	return LamportTimestamp{time: 0, lock: sync.Mutex{}}
 }
 
+/*
+Synchronizes the two timestamps so that the logical timestamp is updated.
+*/
 func (v *LamportTimestamp) Sync(timestamp LamportTimestamp) {
 	v.lock.Lock()
 	v.time = math.Max(timestamp.time, v.time)
