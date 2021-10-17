@@ -23,6 +23,9 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 	}
 }
 
+/*
+Synchronizes the two timestamps so that the logical timestamp is updated.
+*/
 func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
 
 	v.lock.Lock()
@@ -39,6 +42,9 @@ func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
 	}
 }
 
+/*
+Returns the timestamp as a displayble string.
+*/
 func (v VectorTimestamp) GetDisplayableContent() string {
 
 	v.lock.Lock()
@@ -47,6 +53,9 @@ func (v VectorTimestamp) GetDisplayableContent() string {
 	return strconv.Itoa(v.time)
 }
 
+/*
+Increments the timestamp by 1
+*/
 func (v VectorTimestamp) Increment() {
 
 	v.lock.Lock()
