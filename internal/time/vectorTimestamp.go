@@ -9,7 +9,7 @@ import (
 
 type VectorTimestamp struct {
 	ClientId   string
-	VectorTime map[string]int
+	vectorTime map[string]int
 	time       int
 	lock       sync.Mutex
 }
@@ -18,7 +18,7 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 
 	return VectorTimestamp{
 		ClientId:   clientId,
-		VectorTime: make(map[string]int),
+		vectorTime: make(map[string]int),
 		lock:       sync.Mutex{},
 	}
 }
@@ -33,13 +33,17 @@ func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
 
 	v.time = 0 // Reset time and count again
 
-	for key, vt := range foreignTime.VectorTime {
+	for key, vt := range foreignTime.GetVectorTime() {
 		
-		maxValue := math.Max(v.VectorTime[key], vt)
+		maxValue := math.Max(v.vectorTime[key], vt)
 
-		v.VectorTime[key] = maxValue
+		v.vectorTime[key] = maxValue
 		v.time += maxValue
 	}
+}
+
+func (v VectorTimestamp) GetVectorTime() map[string]int {
+	return v.vectorTime
 }
 
 func (v VectorTimestamp) GetDisplayableContent() string {
@@ -55,6 +59,6 @@ func (v VectorTimestamp) Increment() {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	v.VectorTime[v.ClientId] += 1
+	v.vectorTime[v.ClientId] += 1
 	v.time += 1
 }
