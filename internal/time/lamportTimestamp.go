@@ -7,23 +7,14 @@ import (
 	math "github.com/goose-alt/chitty-chat/internal/math"
 )
 
-var (
-	instance *LamportTimestamp
-)
-
 type LamportTimestamp struct {
 	time int
 	lock sync.Mutex
 }
 
-func GetLamportTimeStamp() *LamportTimestamp {
+func GetLamportTimeStamp() LamportTimestamp {
 
-	if instance == nil {
-		timestamp := LamportTimestamp{time: 0, lock: sync.Mutex{}}
-		instance = &timestamp
-	}
-
-	return instance
+	return LamportTimestamp{time: 0, lock: sync.Mutex{}}
 }
 
 func (v *LamportTimestamp) Sync(timestamp LamportTimestamp) {
