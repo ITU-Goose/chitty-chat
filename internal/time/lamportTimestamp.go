@@ -3,14 +3,13 @@ package time
 import (
 	"strconv"
 	"sync"
+
 	math "github.com/goose-alt/chitty-chat/internal/math"
 )
 
 var (
 	instance *LamportTimestamp
 )
-
-
 
 type LamportTimestamp struct {
 	time int
@@ -20,7 +19,7 @@ type LamportTimestamp struct {
 func GetLamportTimeStamp() *LamportTimestamp {
 
 	if instance == nil {
-		timestamp := LamportTimestamp{}
+		timestamp := LamportTimestamp{time: 0, lock: sync.Mutex{}}
 		instance = &timestamp
 	}
 
