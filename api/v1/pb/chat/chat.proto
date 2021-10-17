@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package pb;
+option go_package = "github.com/goose-alt/chitty-chat/api/v1/pb/chat";
+
+service Chat {
+    rpc Register (RegisterMessage) returns (RegisterResponse) {}
+    rpc Chat (stream Message) returns (stream Message) {}
+}
+
+message Lamport {
+    map<string, int32> clients = 1;
+}
+
+message ClientInfo {
+    string uuid = 1;
+    string name = 2;
+}
+
+message RegisterMessage {
+    Lamport timestamp = 1;
+    string name = 2;
+}
+
+message RegisterResponse {
+    Lamport timestamp = 1;
+    ClientInfo info = 2;
+}
+
+message Message {
+    Lamport timestamp = 1;
+    ClientInfo info = 2;
+    string content = 3;
+}
