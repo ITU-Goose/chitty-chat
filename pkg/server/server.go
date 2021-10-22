@@ -98,7 +98,7 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 				continue // Do not send message back to client that submitted the message
 			}
 
-			if err := ss.Chat.Send(&pb.Message{Content: req.Content, Timestamp: nil, Info: &pb.ClientInfo{Uuid: id, Name: s.clients[id].Name}}); err != nil {
+			if err := ss.Chat.Send(&pb.Message{Content: req.Content, Timestamp: req.Timestamp, Info: &pb.ClientInfo{Uuid: id, Name: s.clients[id].Name}}); err != nil {
 				log.Printf("Could not send message for client id %s: %v", key, err)
 			}
 		}
