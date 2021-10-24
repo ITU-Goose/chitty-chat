@@ -9,7 +9,7 @@ service Chat {
 }
 
 message Lamport {
-    map<string, int32> clients = 1;
+    map<string, int> clients = 1;
 }
 
 message ClientInfo {
