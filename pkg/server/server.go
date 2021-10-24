@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -16,14 +15,14 @@ type chatServer struct {
 
 	// List of clients, mapped by their generated id
 	clients map[string]*internal.Client
-	logger  logging.Log
+	Logger  logging.Log
 	lock    sync.Mutex
 }
 
 func NewChatServer() chatServer {
 	return chatServer{
 		clients: make(map[string]*internal.Client),
-		logger:  logging.New(),
+		Logger:  logging.New(),
 	}
 }
 
@@ -43,6 +42,8 @@ func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
 
 	s.clients[id] = &client
 
+	s.Logger.IPrintf("Client connected. ID: %s\n", client.Uuid)
+
 	return &client
 }
 
@@ -51,6 +52,8 @@ func (s *chatServer) removeClient(client *internal.Client) {
 	defer s.lock.Unlock()
 
 	delete(s.clients, client.Uuid)
+
+	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
 }
 
 /*
@@ -65,9 +68,11 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	for {
 		req, err := stream.Recv()
 		if err != nil {
-			log.Printf("Recieve error: %v", err)
+			s.Logger.EPrintf("Recieve error: %v\n", err)
 			return err
 		}
+
+		s.Logger.IPrintf("Recieved message: %v\n", req)
 
 		if client.Name == "" {
 			if req.Info.Name != "" {
@@ -111,9 +116,11 @@ func (s *chatServer) setClientName(id string, name string, timestamp *pb.Lamport
 }
 
 func (s *chatServer) broadcast(message *pb.Message) {
+	s.Logger.IPrintf("Broadcasting message: %v\n", message)
+
 	for key, ss := range s.clients {
 		if err := ss.Chat.Send(message); err != nil {
-			log.Printf("Could not send message for client id %s: %v", key, err)
+			s.Logger.EPrintf("Could not send message for client id %s: %v\n", key, err)
 		}
 	}
 }
