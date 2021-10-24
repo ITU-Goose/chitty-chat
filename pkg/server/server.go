@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"sync"
 
@@ -9,6 +8,7 @@ import (
 
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	"github.com/goose-alt/chitty-chat/internal"
+	"github.com/goose-alt/chitty-chat/internal/logging"
 )
 
 type chatServer struct {
@@ -16,20 +16,21 @@ type chatServer struct {
 
 	// List of clients, mapped by their generated id
 	clients map[string]*internal.Client
-	lock sync.Mutex
+	logger  logging.Log
+	lock    sync.Mutex
 }
 
 func NewChatServer() chatServer {
-	return chatServer {
+	return chatServer{
 		clients: make(map[string]*internal.Client),
+		logger:  logging.New(),
 	}
 }
 
 func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	
-	fmt.Println("Client connected") // TODO: Remove me
+
 	// Generate a new uuid for the client
 	id := uuid.New().String()
 
@@ -49,14 +50,13 @@ func (s *chatServer) removeClient(client *internal.Client) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	fmt.Println("Client disconnected") // TODO: Remove me
 	delete(s.clients, client.Uuid)
 }
 
 /*
 Is a stream to send chat messages. This is bidirectional.
 
-The implementation is inspired by: https://github.com/castaneai/grpc-broadcast-example/blob/master/server/server.go 
+The implementation is inspired by: https://github.com/castaneai/grpc-broadcast-example/blob/master/server/server.go
 */
 func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	client := s.addClient(stream) // Register client
@@ -74,9 +74,9 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 				s.setClientName(client.Uuid, req.Info.Name, req.Timestamp)
 			} else {
 				client.Chat.Send(&pb.Message{
-					Content: "Error: Your name is not yet set",
+					Content:   "Error: Your name is not yet set",
 					Timestamp: req.Timestamp,
-					Info: &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+					Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
 				})
 
 				continue
@@ -84,9 +84,9 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 		}
 
 		s.broadcast(&pb.Message{
-			Content: req.Content,
+			Content:   req.Content,
 			Timestamp: req.Timestamp,
-			Info: &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+			Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
 		})
 	}
 
@@ -101,7 +101,7 @@ func (s *chatServer) setClientName(id string, name string, timestamp *pb.Lamport
 	client.Name = name
 
 	s.broadcast(&pb.Message{
-		Content: "User joined: " + name,
+		Content:   "User joined: " + name,
 		Timestamp: timestamp,
 		Info: &pb.ClientInfo{
 			Uuid: "11111111-1111-1111-1111-111111111111",
