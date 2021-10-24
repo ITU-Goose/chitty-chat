@@ -54,6 +54,15 @@ func (s *chatServer) removeClient(client *internal.Client) {
 	delete(s.clients, client.Uuid)
 
 	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
+
+	s.broadcast(&pb.Message{
+		Content:   "User disconnected: " + client.Name,
+		Timestamp: &pb.Lamport{Clients: make(map[string]int32)}, // TODO: Hmmmm, what to put here?
+		Info: &pb.ClientInfo{
+			Uuid: "11111111-1111-1111-1111-111111111111",
+			Name: "Server",
+		},
+	})
 }
 
 /*
