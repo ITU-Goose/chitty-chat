@@ -8,21 +8,29 @@ import (
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	"github.com/goose-alt/chitty-chat/internal"
 	"github.com/goose-alt/chitty-chat/internal/logging"
+	"github.com/goose-alt/chitty-chat/internal/time"
 )
 
 type chatServer struct {
 	pb.UnimplementedChatServer
 
 	// List of clients, mapped by their generated id
-	clients map[string]*internal.Client
-	Logger  logging.Log
-	lock    sync.Mutex
+	clients   map[string]*internal.Client
+	Logger    logging.Log
+	lock      sync.Mutex
+	timestamp time.VectorTimestamp
 }
+
+const (
+	serverId   = "11111111-1111-1111-1111-111111111111"
+	serverName = "Server"
+)
 
 func NewChatServer() chatServer {
 	return chatServer{
-		clients: make(map[string]*internal.Client),
-		Logger:  logging.New(),
+		clients:   make(map[string]*internal.Client),
+		Logger:    logging.New(),
+		timestamp: time.CreateVectorTimestamp(serverId),
 	}
 }
 
@@ -55,12 +63,13 @@ func (s *chatServer) removeClient(client *internal.Client) {
 
 	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
 
+	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
 		Content:   "User disconnected: " + client.Name,
-		Timestamp: &pb.Lamport{Clients: make(map[string]int32)}, // TODO: Hmmmm, what to put here?
+		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
 		Info: &pb.ClientInfo{
-			Uuid: "11111111-1111-1111-1111-111111111111",
-			Name: "Server",
+			Uuid: serverId,
+			Name: serverName,
 		},
 	})
 }
@@ -85,7 +94,7 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 
 		if client.Name == "" {
 			if req.Info.Name != "" {
-				s.setClientName(client.Uuid, req.Info.Name, req.Timestamp)
+				s.setClientName(client.Uuid, req.Info.Name)
 			} else {
 				client.Chat.Send(&pb.Message{
 					Content:   "Error: Your name is not yet set",
@@ -107,19 +116,20 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	return nil
 }
 
-func (s *chatServer) setClientName(id string, name string, timestamp *pb.Lamport) {
+func (s *chatServer) setClientName(id string, name string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	client := s.clients[id]
 	client.Name = name
 
+	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
 		Content:   "User joined: " + name,
-		Timestamp: timestamp,
+		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
 		Info: &pb.ClientInfo{
-			Uuid: "11111111-1111-1111-1111-111111111111",
-			Name: "Server",
+			Uuid: serverId,
+			Name: serverName,
 		},
 	})
 }
