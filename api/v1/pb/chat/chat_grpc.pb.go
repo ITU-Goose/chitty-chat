@@ -18,7 +18,6 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ChatClient interface {
-	Register(ctx context.Context, in *RegisterMessage, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Chat(ctx context.Context, opts ...grpc.CallOption) (Chat_ChatClient, error)
 }
 
@@ -28,15 +27,6 @@ type chatClient struct {
 
 func NewChatClient(cc grpc.ClientConnInterface) ChatClient {
 	return &chatClient{cc}
-}
-
-func (c *chatClient) Register(ctx context.Context, in *RegisterMessage, opts ...grpc.CallOption) (*RegisterResponse, error) {
-	out := new(RegisterResponse)
-	err := c.cc.Invoke(ctx, "/pb.Chat/Register", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *chatClient) Chat(ctx context.Context, opts ...grpc.CallOption) (Chat_ChatClient, error) {
@@ -74,7 +64,6 @@ func (x *chatChatClient) Recv() (*Message, error) {
 // All implementations must embed UnimplementedChatServer
 // for forward compatibility
 type ChatServer interface {
-	Register(context.Context, *RegisterMessage) (*RegisterResponse, error)
 	Chat(Chat_ChatServer) error
 	mustEmbedUnimplementedChatServer()
 }
@@ -83,9 +72,6 @@ type ChatServer interface {
 type UnimplementedChatServer struct {
 }
 
-func (UnimplementedChatServer) Register(context.Context, *RegisterMessage) (*RegisterResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Register not implemented")
-}
 func (UnimplementedChatServer) Chat(Chat_ChatServer) error {
 	return status.Errorf(codes.Unimplemented, "method Chat not implemented")
 }
@@ -100,24 +86,6 @@ type UnsafeChatServer interface {
 
 func RegisterChatServer(s grpc.ServiceRegistrar, srv ChatServer) {
 	s.RegisterService(&Chat_ServiceDesc, srv)
-}
-
-func _Chat_Register_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterMessage)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ChatServer).Register(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/pb.Chat/Register",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ChatServer).Register(ctx, req.(*RegisterMessage))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Chat_Chat_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -152,12 +120,7 @@ func (x *chatChatServer) Recv() (*Message, error) {
 var Chat_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "pb.Chat",
 	HandlerType: (*ChatServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Register",
-			Handler:    _Chat_Register_Handler,
-		},
-	},
+	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Chat",
