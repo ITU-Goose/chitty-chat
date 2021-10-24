@@ -26,14 +26,14 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 /*
 Synchronizes the two timestamps so that the logical timestamp is updated.
 */
-func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
+func (v VectorTimestamp) Sync(foreignTime map[string]int) {
 
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
 	v.time = 0 // Reset time and count again
 
-	for key, vt := range foreignTime.GetVectorTime() {
+	for key, vt := range foreignTime {
 		
 		maxValue := math.Max(v.vectorTime[key], vt)
 
