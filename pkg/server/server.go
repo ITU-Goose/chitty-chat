@@ -53,15 +53,6 @@ func (s *chatServer) removeClient(client *internal.Client) {
 	delete(s.clients, client.Uuid)
 }
 
-// TODO: Delete this
-func fakeLamport() *pb.Lamport {
-	lamport := pb.Lamport {
-		Clients: make(map[string]int32),
-	}
-
-	return &lamport
-}
-
 /*
 Is a stream to send chat messages. This is bidirectional.
 
@@ -121,10 +112,6 @@ func (s *chatServer) setClientName(id string, name string, timestamp *pb.Lamport
 
 func (s *chatServer) broadcast(message *pb.Message) {
 	for key, ss := range s.clients {
-		/*if key == message.Info.Uuid {
-			continue // Do not send message back to client that submitted the message
-		}*/
-		
 		if err := ss.Chat.Send(message); err != nil {
 			log.Printf("Could not send message for client id %s: %v", key, err)
 		}
