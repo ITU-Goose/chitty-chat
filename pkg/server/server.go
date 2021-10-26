@@ -18,7 +18,7 @@ type chatServer struct {
 	clients   map[string]*internal.Client
 	Logger    logging.Log
 	lock      sync.Mutex
-	timestamp time.VectorTimestamp
+	timestamp *time.VectorTimestamp
 }
 
 const (

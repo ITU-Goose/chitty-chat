@@ -14,9 +14,8 @@ type VectorTimestamp struct {
 	lock       sync.Mutex
 }
 
-func CreateVectorTimestamp(clientId string) VectorTimestamp {
-
-	return VectorTimestamp{
+func CreateVectorTimestamp(clientId string) *VectorTimestamp {
+	return &VectorTimestamp{
 		ClientId:   clientId,
 		vectorTime: make(map[string]int32),
 		lock:       sync.Mutex{},
@@ -26,7 +25,7 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 /*
 Synchronizes the two timestamps so that the logical timestamp is updated.
 */
-func (v VectorTimestamp) Sync(foreignTime map[string]int32) {
+func (v *VectorTimestamp) Sync(foreignTime map[string]int32) {
 
 	v.lock.Lock()
 	defer v.lock.Unlock()
@@ -42,11 +41,11 @@ func (v VectorTimestamp) Sync(foreignTime map[string]int32) {
 	}
 }
 
-func (v VectorTimestamp) GetVectorTime() map[string]int32 {
+func (v *VectorTimestamp) GetVectorTime() map[string]int32 {
 	return v.vectorTime
 }
 
-func (v VectorTimestamp) GetDisplayableContent() string {
+func (v *VectorTimestamp) GetDisplayableContent() string {
 
 	v.lock.Lock()
 	defer v.lock.Unlock()
@@ -54,7 +53,7 @@ func (v VectorTimestamp) GetDisplayableContent() string {
 	return strconv.Itoa(int(v.time))
 }
 
-func (v VectorTimestamp) Increment() {
+func (v *VectorTimestamp) Increment() {
 
 	v.lock.Lock()
 	defer v.lock.Unlock()

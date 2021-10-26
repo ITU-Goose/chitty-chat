@@ -43,7 +43,7 @@ func readInput() string {
 	return input
 }
 
-func chat(c pb.ChatClient, ctx context.Context, message string, timestamp ts.VectorTimestamp) {
+func chat(c pb.ChatClient, ctx context.Context, message string, timestamp *ts.VectorTimestamp) {
 	timestamp.Increment()
 	c.Chat(ctx, pb.Message{Content: message, Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}})
 }
