@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/google/uuid"
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	ts "github.com/goose-alt/chitty-chat/internal/time"
 	"google.golang.org/grpc"
@@ -15,7 +14,6 @@ import (
 const (
 	address     = "localhost:50051"
 	defaultName = "world"
-	
 )
 
 func main() {
@@ -36,7 +34,7 @@ func main() {
 
 	message := readInput()
 
-	chat(c,ctx,message,timestamp)
+	chat(c, ctx, message, timestamp)
 
 }
 
@@ -47,5 +45,5 @@ func readInput() string {
 
 func chat(c pb.ChatClient, ctx context.Context, message string, timestamp ts.VectorTimestamp) {
 	timestamp.Increment()
-	c.Chat(ctx, pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}})
+	c.Chat(ctx, pb.Message{Content: message, Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}})
 }
