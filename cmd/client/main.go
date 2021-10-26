@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -46,7 +47,6 @@ func readInput() string {
 }
 
 func chat(c pb.ChatClient, ctx context.Context, message string, timestamp ts.VectorTimestamp) {
-	timestamp.Increment()
 	stream, err := c.Chat(context.Background())
 	if err!=nil{
 		return
@@ -54,19 +54,21 @@ func chat(c pb.ChatClient, ctx context.Context, message string, timestamp ts.Vec
 	waitc := make(chan struct{})
 	go func() {
 		for {
-		  in, err := stream.Recv()
-		  if err == io.EOF {
-			// read done.
-			close(waitc)
-			return
-		  }
-		  if err != nil {
-			log.Fatalf("Failed to receive a note : %v", err)
-		  }
-		  log.Printf("Got message %s. From: %s. Timestamp: %d", in.Content, in.Info.Name, in.Timestamp)
+			in, err := stream.Recv()
+			if err == io.EOF {
+				// read done.
+				close(waitc)
+				return
+			}
+			if err != nil {
+				log.Fatalf("Failed to receive a note : %v", err)
+			}
+			timestamp.Sync(in.Timestamp.Clients)
+			timestamp.Increment()
+		  log.Printf("Got message %s. From: %s. Timestamp: %s", in.Content, in.Info.Name, timestamp.GetDisplayableContent())
 		}
 	  }()
-	  mes := pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}}
+	  mes := pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "", Name: "Amalie"}}
 		if err := stream.Send(&mes); err != nil {
 		  log.Fatalf("Failed to send a note: %v", err)
 		}
