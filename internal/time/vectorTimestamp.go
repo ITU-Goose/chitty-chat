@@ -9,8 +9,8 @@ import (
 
 type VectorTimestamp struct {
 	ClientId   string
-	vectorTime map[string]int
-	time       int
+	vectorTime map[string]int32
+	time       int32
 	lock       sync.Mutex
 }
 
@@ -18,7 +18,7 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 
 	return VectorTimestamp{
 		ClientId:   clientId,
-		vectorTime: make(map[string]int),
+		vectorTime: make(map[string]int32),
 		lock:       sync.Mutex{},
 	}
 }
@@ -26,15 +26,15 @@ func CreateVectorTimestamp(clientId string) VectorTimestamp {
 /*
 Synchronizes the two timestamps so that the logical timestamp is updated.
 */
-func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
+func (v VectorTimestamp) Sync(foreignTime map[string]int32) {
 
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
 	v.time = 0 // Reset time and count again
 
-	for key, vt := range foreignTime.GetVectorTime() {
-		
+	for key, vt := range foreignTime {
+
 		maxValue := math.Max(v.vectorTime[key], vt)
 
 		v.vectorTime[key] = maxValue
@@ -42,7 +42,7 @@ func (v VectorTimestamp) Sync(foreignTime VectorTimestamp) {
 	}
 }
 
-func (v VectorTimestamp) GetVectorTime() map[string]int {
+func (v VectorTimestamp) GetVectorTime() map[string]int32 {
 	return v.vectorTime
 }
 
@@ -51,7 +51,7 @@ func (v VectorTimestamp) GetDisplayableContent() string {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	return strconv.Itoa(v.time)
+	return strconv.Itoa(int(v.time))
 }
 
 func (v VectorTimestamp) Increment() {

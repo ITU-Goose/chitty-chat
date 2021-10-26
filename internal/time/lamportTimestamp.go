@@ -8,7 +8,7 @@ import (
 )
 
 type LamportTimestamp struct {
-	time int
+	time int32
 	lock sync.Mutex
 }
 
@@ -20,18 +20,20 @@ func GetLamportTimeStamp() LamportTimestamp {
 /*
 Synchronizes the two timestamps so that the logical timestamp is updated.
 */
-func (v *LamportTimestamp) Sync(timestamp LamportTimestamp) {
+func (v *LamportTimestamp) Sync(foreignTimestamp int32) {
 	v.lock.Lock()
-	v.time = math.Max(timestamp.time, v.time)
-	v.lock.Unlock()
+	defer v.lock.Unlock()
+
+	v.time = math.Max(foreignTimestamp, v.time)
 }
 
 func (v *LamportTimestamp) GetDisplayableContent() string {
-	return strconv.Itoa(v.time)
+	return strconv.Itoa(int(v.time))
 }
 
 func (v *LamportTimestamp) Increment() {
 	v.lock.Lock()
+	defer v.lock.Unlock()
+
 	v.time += 1
-	v.lock.Unlock()
 }

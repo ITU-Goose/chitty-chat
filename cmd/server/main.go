@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net"
 
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
@@ -14,18 +13,18 @@ const (
 )
 
 func main() {
+	server := pkg.NewChatServer()
+
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatalf("Failed to open listener: %v", err)
+		server.Logger.EPrintf("Failed to open listener: %v", err)
 	}
-
-	server := pkg.NewChatServer()
 
 	s := grpc.NewServer()
 	pb.RegisterChatServer(s, &server)
 
-	log.Printf("Listening on: %v", listener.Addr())
+	server.Logger.IPrintf("Listening on: %v", listener.Addr())
 	if err := s.Serve(listener); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+		server.Logger.EPrintf("Failed to serve: %v", err)
 	}
 }
