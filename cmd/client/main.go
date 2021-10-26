@@ -23,6 +23,7 @@ const (
 func main() {
 	// Generate a new uuid for the client
 	id := uuid.New().String()
+	name := askForUsername()
 	timestamp := ts.CreateVectorTimestamp(id)
 
 	// Set up a connection to the server.
@@ -43,36 +44,13 @@ func main() {
 		return
 	}
 
-	uuid,name := register(c,ctx,timestamp,stream,waitc)
-	chat(c,ctx,timestamp,stream,waitc,uuid,name)
+	chat(c,ctx,timestamp,stream,waitc,id,name)
 
 }
 
 func readInput() string {
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	return input
-}
-
-func register(c pb.ChatClient, ctx context.Context, timestamp ts.VectorTimestamp, stream pb.Chat_ChatClient, waitc chan struct{}) (userId string, name string) {
-	name = askForUsername()
-
-	timestamp.Increment()
-
-	stream.Send(&pb.Message{Content: "",Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "", Name: name}})
-	in, err := stream.Recv()
-	if err == io.EOF {
-		// read done.
-		close(waitc)
-		return
-	}
-	if err != nil {
-		log.Fatalf("Failed to receive a note : %v", err)
-	}
-	userId = in.Info.Uuid
-	timestamp.Sync(in.Timestamp.Clients)
-	log.Printf("Got message %s. From: %s. Timestamp: %s", in.Content, in.Info.Name, timestamp.GetDisplayableContent())
-	  
-	return userId,name		
 }
 
 func askForUsername() string {
