@@ -4,12 +4,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.server
-  client-1:
+  client:
     build:
       context: .
       dockerfile: Dockerfile.client
     environment:
       HOST: "server"
-    deploy:
-      mode: replicated
-      replicas: 3
