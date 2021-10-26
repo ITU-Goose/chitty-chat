@@ -1,9 +1,10 @@
 package server
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"sync"
-
-	"github.com/google/uuid"
 
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	"github.com/goose-alt/chitty-chat/internal"
@@ -18,7 +19,7 @@ type chatServer struct {
 	clients   map[string]*internal.Client
 	Logger    logging.Log
 	lock      sync.Mutex
-	timestamp time.VectorTimestamp
+	timestamp *time.VectorTimestamp
 }
 
 const (
@@ -34,17 +35,22 @@ func NewChatServer() chatServer {
 	}
 }
 
-func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
+func (s *chatServer) addClient(req *pb.Message, stream pb.Chat_ChatServer) (*internal.Client, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Generate a new uuid for the client
-	id := uuid.New().String()
+	id := req.Info.Uuid
+	name := req.Info.Name
+
+	// TODO: Validate Id to be unique
+	if id == "" || name == "" {
+		return nil, errors.New(fmt.Sprintf("Missing information. id=%s,name=%s", id, name))
+	}
 
 	// TODO: Replace name with username
 	client := internal.Client{
 		Uuid: id,
-		Name: "",
+		Name: name,
 		Chat: stream,
 	}
 
@@ -52,7 +58,17 @@ func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
 
 	s.Logger.IPrintf("Client connected. ID: %s\n", client.Uuid)
 
-	return &client
+	// TODO: This should be done on all messages sent
+	s.timestamp.Increment()
+	s.broadcast(&pb.Message{
+		Content: "User joined: " + name,
+		Info: &pb.ClientInfo{
+			Uuid: serverId,
+			Name: serverName,
+		},
+	})
+
+	return &client, nil
 }
 
 func (s *chatServer) removeClient(client *internal.Client) {
@@ -63,10 +79,8 @@ func (s *chatServer) removeClient(client *internal.Client) {
 
 	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
 
-	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
-		Content:   "User disconnected: " + client.Name,
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
+		Content: "User disconnected: " + client.Name,
 		Info: &pb.ClientInfo{
 			Uuid: serverId,
 			Name: serverName,
@@ -80,75 +94,70 @@ Is a stream to send chat messages. This is bidirectional.
 The implementation is inspired by: https://github.com/castaneai/grpc-broadcast-example/blob/master/server/server.go
 */
 func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
-	client := s.addClient(stream) // Register client
+	clientRegistered := false
+
+	client := &internal.Client{}
+	s.timestamp.Increment()
+
 	defer s.removeClient(client)
 
 	for {
 		req, err := stream.Recv()
-		if err != nil {
+		if err == io.EOF {
+			s.timestamp.Increment()
+			break
+		} else if err != nil {
 			s.Logger.EPrintf("Recieve error: %v\n", err)
 			return err
 		}
 
 		s.Logger.IPrintf("Recieved message: %v\n", req)
 
-		if client.Name == "" {
-			if req.Info.Name != "" {
-				s.setClientName(client.Uuid, req.Info.Name)
-			} else {
-				client.Chat.Send(&pb.Message{
-					Content:   "Error: Your name is not yet set",
-					Timestamp: req.Timestamp,
-					Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+		s.timestamp.Sync(req.Timestamp.Clients)
+		s.timestamp.Increment()
+
+		if !clientRegistered {
+			client, err = s.addClient(req, stream) // Register Client
+			if err != nil {
+				s.Logger.EPrintf("Missing information: %v\n", err)
+				s.sendMessage(&stream, &pb.Message{
+					Content: err.Error(),
+					Info: &pb.ClientInfo{
+						Uuid: serverId,
+						Name: serverName,
+					},
 				})
 
-				continue
+				break
 			}
+
+			clientRegistered = true
 		}
 
 		s.broadcast(&pb.Message{
-			Content:   req.Content,
-			Timestamp: req.Timestamp,
-			Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+			Content: req.Content,
+			Info:    &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
 		})
 	}
 
 	return nil
 }
 
-func (s *chatServer) setClientName(id string, name string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	client := s.clients[id]
-	client.Name = name
-	
-	s.timestamp.Increment()
-	client.Chat.Send(&pb.Message{
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()},
-		Info: &pb.ClientInfo{
-			Uuid: id,
-			Name: name,
-		},
-	})
-
-	s.timestamp.Increment()
-	s.broadcast(&pb.Message{
-		Content:   "User joined: " + name,
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
-		Info: &pb.ClientInfo{
-			Uuid: serverId,
-			Name: serverName,
-		},
-	})
-}
-
 func (s *chatServer) broadcast(message *pb.Message) {
 	s.Logger.IPrintf("Broadcasting message: %v\n", message)
 
 	for key, ss := range s.clients {
-		if err := ss.Chat.Send(message); err != nil {
+		if err := s.sendMessage(&ss.Chat, message); err != nil {
 			s.Logger.EPrintf("Could not send message for client id %s: %v\n", key, err)
 		}
 	}
+}
+
+func (s *chatServer) sendMessage(target *pb.Chat_ChatServer, message *pb.Message) error {
+	s.timestamp.Increment()
+	message.Timestamp = &pb.Lamport{Clients: s.timestamp.GetVectorTime()}
+
+	s.Logger.IPrintf("Sending message: %v\n", message)
+
+	return (*target).Send(message)
 }
