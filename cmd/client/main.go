@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -15,11 +16,17 @@ import (
 )
 
 const (
-	address     = "localhost:50051"
 	defaultName = "world"
 )
 
 func main() {
+	host := flag.String("host", "localhost", "The host to connect to, usually an IP address")
+	port := flag.String("port", "50051", "The port of the server to connect to")
+	random := flag.Bool("random", false, "Chat randomly with the server, requiring no user input")
+	flag.Parse()
+
+	address := fmt.Sprintf("%s:%s", *host, *port)
+
 	// Generate a new uuid for the client
 	id := uuid.New().String()
 	name := askForUsername()
@@ -43,8 +50,9 @@ func main() {
 		return
 	}
 
-	chat(c, ctx, timestamp, stream, waitc, id, name)
-
+	if !*random {
+		chat(c, ctx, timestamp, stream, waitc, id, name)
+	}
 }
 
 func readInput() string {
