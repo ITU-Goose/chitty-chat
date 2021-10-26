@@ -122,6 +122,15 @@ func (s *chatServer) setClientName(id string, name string) {
 
 	client := s.clients[id]
 	client.Name = name
+	
+	s.timestamp.Increment()
+	client.Chat.Send(&pb.Message{
+		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()},
+		Info: &pb.ClientInfo{
+			Uuid: id,
+			Name: name,
+		},
+	})
 
 	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
