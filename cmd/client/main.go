@@ -80,6 +80,7 @@ func chat(c pb.ChatClient, ctx context.Context, timestamp *ts.VectorTimestamp, s
 			log.Printf("Got message %s. From: %s. Timestamp: %s", in.Content, in.Info.Name, timestamp.GetDisplayableContent())
 		}
 	}()
+
 	for {
 		message := readInput()
 		mes := pb.Message{Content: message, Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: uuid, Name: name}}
