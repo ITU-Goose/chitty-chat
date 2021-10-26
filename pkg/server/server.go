@@ -1,9 +1,9 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"sync"
-
-	"github.com/google/uuid"
 
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	"github.com/goose-alt/chitty-chat/internal"
@@ -34,17 +34,22 @@ func NewChatServer() chatServer {
 	}
 }
 
-func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
+func (s *chatServer) addClient(req *pb.Message, stream pb.Chat_ChatServer) (*internal.Client, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Generate a new uuid for the client
-	id := uuid.New().String()
+	id := req.Info.Uuid
+	name := req.Info.Name
+
+	// TODO: Validate Id to be unique
+	if id == "" || name == "" {
+		return nil, errors.New(fmt.Sprintf("Missing information. id=%s,name=%s", id, name))
+	}
 
 	// TODO: Replace name with username
 	client := internal.Client{
 		Uuid: id,
-		Name: "",
+		Name: name,
 		Chat: stream,
 	}
 
@@ -52,7 +57,18 @@ func (s *chatServer) addClient(stream pb.Chat_ChatServer) *internal.Client {
 
 	s.Logger.IPrintf("Client connected. ID: %s\n", client.Uuid)
 
-	return &client
+	// TODO: This should be done on all messages sent
+	s.timestamp.Increment()
+	s.broadcast(&pb.Message{
+		Content:   "User joined: " + name,
+		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
+		Info: &pb.ClientInfo{
+			Uuid: serverId,
+			Name: serverName,
+		},
+	})
+
+	return &client, nil
 }
 
 func (s *chatServer) removeClient(client *internal.Client) {
@@ -80,7 +96,9 @@ Is a stream to send chat messages. This is bidirectional.
 The implementation is inspired by: https://github.com/castaneai/grpc-broadcast-example/blob/master/server/server.go
 */
 func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
-	client := s.addClient(stream) // Register client
+	clientRegistered := false
+
+	client := &internal.Client{}
 	defer s.removeClient(client)
 
 	for {
@@ -90,21 +108,26 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 			return err
 		}
 
-		s.Logger.IPrintf("Recieved message: %v\n", req)
-
-		if client.Name == "" {
-			if req.Info.Name != "" {
-				s.setClientName(client.Uuid, req.Info.Name)
-			} else {
-				client.Chat.Send(&pb.Message{
-					Content:   "Error: Your name is not yet set",
+		if !clientRegistered {
+			client, err = s.addClient(req, stream) // Register Client
+			if err != nil {
+				s.Logger.EPrintf("Missing information: %v\n", err)
+				stream.Send(&pb.Message{
+					Content:   err.Error(),
 					Timestamp: req.Timestamp,
-					Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+					Info: &pb.ClientInfo{
+						Uuid: serverId,
+						Name: serverName,
+					},
 				})
 
-				continue
+				break
 			}
+
+			clientRegistered = true
 		}
+
+		s.Logger.IPrintf("Recieved message: %v\n", req)
 
 		s.broadcast(&pb.Message{
 			Content:   req.Content,
@@ -114,33 +137,6 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	}
 
 	return nil
-}
-
-func (s *chatServer) setClientName(id string, name string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	client := s.clients[id]
-	client.Name = name
-	
-	s.timestamp.Increment()
-	client.Chat.Send(&pb.Message{
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()},
-		Info: &pb.ClientInfo{
-			Uuid: id,
-			Name: name,
-		},
-	})
-
-	s.timestamp.Increment()
-	s.broadcast(&pb.Message{
-		Content:   "User joined: " + name,
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
-		Info: &pb.ClientInfo{
-			Uuid: serverId,
-			Name: serverName,
-		},
-	})
 }
 
 func (s *chatServer) broadcast(message *pb.Message) {
