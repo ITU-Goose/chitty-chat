@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
@@ -18,7 +19,7 @@ type chatServer struct {
 	clients   map[string]*internal.Client
 	Logger    logging.Log
 	lock      sync.Mutex
-	timestamp time.VectorTimestamp
+	timestamp *time.VectorTimestamp
 }
 
 const (
@@ -60,8 +61,7 @@ func (s *chatServer) addClient(req *pb.Message, stream pb.Chat_ChatServer) (*int
 	// TODO: This should be done on all messages sent
 	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
-		Content:   "User joined: " + name,
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
+		Content: "User joined: " + name,
 		Info: &pb.ClientInfo{
 			Uuid: serverId,
 			Name: serverName,
@@ -79,10 +79,8 @@ func (s *chatServer) removeClient(client *internal.Client) {
 
 	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
 
-	s.timestamp.Increment()
 	s.broadcast(&pb.Message{
-		Content:   "User disconnected: " + client.Name,
-		Timestamp: &pb.Lamport{Clients: s.timestamp.GetVectorTime()}, // TODO: Hmmmm, what to put here?
+		Content: "User disconnected: " + client.Name,
 		Info: &pb.ClientInfo{
 			Uuid: serverId,
 			Name: serverName,
@@ -99,22 +97,31 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	clientRegistered := false
 
 	client := &internal.Client{}
+	s.timestamp.Increment()
+
 	defer s.removeClient(client)
 
 	for {
 		req, err := stream.Recv()
-		if err != nil {
+		if err == io.EOF {
+			s.timestamp.Increment()
+			break
+		} else if err != nil {
 			s.Logger.EPrintf("Recieve error: %v\n", err)
 			return err
 		}
+
+		s.Logger.IPrintf("Recieved message: %v\n", req)
+
+		s.timestamp.Sync(req.Timestamp.Clients)
+		s.timestamp.Increment()
 
 		if !clientRegistered {
 			client, err = s.addClient(req, stream) // Register Client
 			if err != nil {
 				s.Logger.EPrintf("Missing information: %v\n", err)
-				stream.Send(&pb.Message{
-					Content:   err.Error(),
-					Timestamp: req.Timestamp,
+				s.sendMessage(&stream, &pb.Message{
+					Content: err.Error(),
 					Info: &pb.ClientInfo{
 						Uuid: serverId,
 						Name: serverName,
@@ -127,12 +134,9 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 			clientRegistered = true
 		}
 
-		s.Logger.IPrintf("Recieved message: %v\n", req)
-
 		s.broadcast(&pb.Message{
-			Content:   req.Content,
-			Timestamp: req.Timestamp,
-			Info:      &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
+			Content: req.Content,
+			Info:    &pb.ClientInfo{Uuid: client.Uuid, Name: client.Name},
 		})
 	}
 
@@ -143,8 +147,17 @@ func (s *chatServer) broadcast(message *pb.Message) {
 	s.Logger.IPrintf("Broadcasting message: %v\n", message)
 
 	for key, ss := range s.clients {
-		if err := ss.Chat.Send(message); err != nil {
+		if err := s.sendMessage(&ss.Chat, message); err != nil {
 			s.Logger.EPrintf("Could not send message for client id %s: %v\n", key, err)
 		}
 	}
+}
+
+func (s *chatServer) sendMessage(target *pb.Chat_ChatServer, message *pb.Message) error {
+	s.timestamp.Increment()
+	message.Timestamp = &pb.Lamport{Clients: s.timestamp.GetVectorTime()}
+
+	s.Logger.IPrintf("Sending message: %v\n", message)
+
+	return (*target).Send(message)
 }
