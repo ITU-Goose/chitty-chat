@@ -3,10 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"io"
 	"log"
 	"os"
 
-	"github.com/google/uuid"
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	ts "github.com/goose-alt/chitty-chat/internal/time"
 	"google.golang.org/grpc"
@@ -47,5 +47,30 @@ func readInput() string {
 
 func chat(c pb.ChatClient, ctx context.Context, message string, timestamp ts.VectorTimestamp) {
 	timestamp.Increment()
-	c.Chat(ctx, pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}})
+	stream, err := c.Chat(context.Background())
+	if err!=nil{
+		return
+	}
+	waitc := make(chan struct{})
+	go func() {
+		for {
+		  in, err := stream.Recv()
+		  if err == io.EOF {
+			// read done.
+			close(waitc)
+			return
+		  }
+		  if err != nil {
+			log.Fatalf("Failed to receive a note : %v", err)
+		  }
+		  log.Printf("Got message %s. From: %s. Timestamp: %d", in.Content, in.Info.Name, in.Timestamp)
+		}
+	  }()
+	  mes := pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: "søde smukke", Name: "Amalie"}}
+		if err := stream.Send(&mes); err != nil {
+		  log.Fatalf("Failed to send a note: %v", err)
+		}
+	stream.CloseSend()
+	<-waitc
+
 }
