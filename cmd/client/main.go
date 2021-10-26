@@ -17,7 +17,6 @@ import (
 const (
 	address     = "localhost:50051"
 	defaultName = "world"
-	
 )
 
 func main() {
@@ -65,7 +64,6 @@ func askForUsername() string {
 }
 
 func chat(c pb.ChatClient, ctx context.Context, timestamp ts.VectorTimestamp, stream pb.Chat_ChatClient, waitc chan struct{}, uuid string, name string) {
-	message := readInput()
 	go func() {
 		for {
 			in, err := stream.Recv()
@@ -82,11 +80,11 @@ func chat(c pb.ChatClient, ctx context.Context, timestamp ts.VectorTimestamp, st
 		  log.Printf("Got message %s. From: %s. Timestamp: %s", in.Content, in.Info.Name, timestamp.GetDisplayableContent())
 		}
 	  }()
+	  for{
+	  message := readInput()
 	  mes := pb.Message{Content: message,Timestamp: &pb.Lamport{Clients: timestamp.GetVectorTime()}, Info: &pb.ClientInfo{Uuid: uuid, Name: name}}
 		if err := stream.Send(&mes); err != nil {
 		  log.Fatalf("Failed to send a note: %v", err)
 		}
-	stream.CloseSend()
-	<-waitc
-
+	}
 }
