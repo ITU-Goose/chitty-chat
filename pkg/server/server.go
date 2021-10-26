@@ -9,6 +9,7 @@ import (
 	pb "github.com/goose-alt/chitty-chat/api/v1/pb/chat"
 	"github.com/goose-alt/chitty-chat/internal"
 	"github.com/goose-alt/chitty-chat/internal/logging"
+	lm "github.com/goose-alt/chitty-chat/internal/message"
 	"github.com/goose-alt/chitty-chat/internal/time"
 )
 
@@ -35,57 +36,98 @@ func NewChatServer() chatServer {
 	}
 }
 
-func (s *chatServer) addClient(req *pb.Message, stream pb.Chat_ChatServer) (*internal.Client, error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	id := req.Info.Uuid
-	name := req.Info.Name
-
-	// TODO: Validate Id to be unique
-	if id == "" || name == "" {
-		return nil, errors.New(fmt.Sprintf("Missing information. id=%s,name=%s", id, name))
-	}
-
-	// TODO: Replace name with username
-	client := internal.Client{
-		Uuid: id,
-		Name: name,
-		Chat: stream,
-	}
-
-	s.clients[id] = &client
-
-	s.Logger.IPrintf("Client connected. ID: %s\n", client.Uuid)
-
-	// TODO: This should be done on all messages sent
+func (s *chatServer) sendMessage(target *pb.Chat_ChatServer, message *pb.Message) error {
 	s.timestamp.Increment()
+	message.Timestamp = &pb.Lamport{Clients: s.timestamp.GetVectorTime()}
+
+	lm.PrintMessage("Sending message", s.Logger, message.Content, s.timestamp, message.Info.Uuid)
+
+	return (*target).Send(message)
+}
+
+func (s *chatServer) sendSystemMessage(target *pb.Chat_ChatServer, msg string) error {
+	s.timestamp.Increment()
+	message := &pb.Message{
+		Content: msg,
+		Info: &pb.ClientInfo{
+			Uuid: serverId,
+			Name: serverName,
+		},
+	}
+	lm.PrintMessage("Sending system message", s.Logger, msg, s.timestamp, message.Info.Uuid)
+
+	return (*target).Send(message)
+}
+
+func (s *chatServer) broadcastSystemMessage(message string) {
+	s.Logger.IPrintf("Broadcasting system message: \"%s\"\n", message)
 	s.broadcast(&pb.Message{
-		Content: "User joined: " + name,
+		Content: message,
 		Info: &pb.ClientInfo{
 			Uuid: serverId,
 			Name: serverName,
 		},
 	})
+}
 
-	return &client, nil
+func (s *chatServer) broadcast(message *pb.Message) {
+	lm.PrintMessage("Broadcasting message", s.Logger, message.Content, s.timestamp, message.Info.Uuid)
+
+	for key, ss := range s.clients {
+		if err := s.sendMessage(&ss.Chat, message); err != nil {
+			s.Logger.EPrintf("Could not send message for client id %s: %v\n", key, err)
+		}
+	}
+}
+
+func (s *chatServer) recieveMessage(stream *pb.Chat_ChatServer) (*pb.Message, error) {
+	req, err := (*stream).Recv()
+	if err != nil {
+		return nil, err
+	}
+
+	s.timestamp.Sync(req.Timestamp.Clients)
+	s.timestamp.Increment()
+	lm.PrintMessage("Recieved message", s.Logger, req.Content, s.timestamp, req.Info.Uuid)
+
+	return req, nil
+}
+
+func (s *chatServer) addClient(req *pb.Message, stream pb.Chat_ChatServer) (*internal.Client, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	id, name := req.Info.Uuid, req.Info.Name
+
+	// TODO: Validate Id to be unique
+	if id == "" || name == "" {
+		return nil, errors.New(fmt.Sprintf("Missing information. id=%s,name=%s", id, name))
+	} else if _, exists := s.clients[id]; exists {
+		return nil, errors.New(fmt.Sprintf("Client with id: %s, already exists", id))
+	}
+
+	client := &internal.Client{
+		Uuid: id,
+		Name: name,
+		Chat: stream,
+	}
+	s.clients[id] = client
+
+	s.Logger.IPrintf("Client connected. (%s)%s: %s\n", client.Name, client.Uuid)
+	s.broadcastSystemMessage("User joined: " + name)
+
+	return client, nil
 }
 
 func (s *chatServer) removeClient(client *internal.Client) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	s.Logger.IPrintf("Client disconnected. (%s)%s: %s\n", client.Name, client.Uuid)
+
 	delete(s.clients, client.Uuid)
 
-	s.Logger.IPrintf("Client disconnected. ID: %s\n", client.Uuid)
-
-	s.broadcast(&pb.Message{
-		Content: "User disconnected: " + client.Name,
-		Info: &pb.ClientInfo{
-			Uuid: serverId,
-			Name: serverName,
-		},
-	})
+	s.broadcastSystemMessage("User left: " + client.Name)
 }
 
 /*
@@ -99,36 +141,26 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	client := &internal.Client{}
 	s.timestamp.Increment()
 
-	defer s.removeClient(client)
-
 	for {
-		req, err := stream.Recv()
-		if err == io.EOF {
-			s.timestamp.Increment()
-			break
-		} else if err != nil {
+		req, err := s.recieveMessage(&stream)
+		if err != nil {
+			s.removeClient(client)
+
+			fmt.Printf("%T\n", err)
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+
 			s.Logger.EPrintf("Recieve error: %v\n", err)
 			return err
 		}
 
-		s.Logger.IPrintf("Recieved message: %v\n", req)
-
-		s.timestamp.Sync(req.Timestamp.Clients)
-		s.timestamp.Increment()
-
 		if !clientRegistered {
 			client, err = s.addClient(req, stream) // Register Client
 			if err != nil {
-				s.Logger.EPrintf("Missing information: %v\n", err)
-				s.sendMessage(&stream, &pb.Message{
-					Content: err.Error(),
-					Info: &pb.ClientInfo{
-						Uuid: serverId,
-						Name: serverName,
-					},
-				})
-
-				break
+				s.Logger.EPrintf("Failed to add client: %v\n", err)
+				s.sendSystemMessage(&stream, err.Error())
+				return err
 			}
 
 			clientRegistered = true
@@ -141,23 +173,4 @@ func (s *chatServer) Chat(stream pb.Chat_ChatServer) error {
 	}
 
 	return nil
-}
-
-func (s *chatServer) broadcast(message *pb.Message) {
-	s.Logger.IPrintf("Broadcasting message: %v\n", message)
-
-	for key, ss := range s.clients {
-		if err := s.sendMessage(&ss.Chat, message); err != nil {
-			s.Logger.EPrintf("Could not send message for client id %s: %v\n", key, err)
-		}
-	}
-}
-
-func (s *chatServer) sendMessage(target *pb.Chat_ChatServer, message *pb.Message) error {
-	s.timestamp.Increment()
-	message.Timestamp = &pb.Lamport{Clients: s.timestamp.GetVectorTime()}
-
-	s.Logger.IPrintf("Sending message: %v\n", message)
-
-	return (*target).Send(message)
 }
