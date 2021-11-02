@@ -1,0 +1,18 @@
+@startuml
+title Sequence diagram of joining and sending a message
+
+actor Client1 as client1
+database Server as server
+actor Client2 as client2
+
+client2 -> server : Join({"Client2": 1})
+server -> client2 : Send(Client2 joined, {"Client 2": 1, "Server": 2})
+client1 -> server : Join({"Client1": 1})
+server -> client1 : Send(Client1 joined, {"Client1": 1, "Client2": 1, "Server": 4})
+server -> client2 : Send(Client1 joined, {"Client1": 1, "Client2": 1, "Server": 5})
+client1 -> server : Send(Hi!, {"Client1": 3, "Client2": 1, "Server": 4})
+server -> client1 : Send(Client1: Hi!, {"Client1": 3, "Client2": 1, "Server": 7})
+server -> client2 : Send(Client1: Hi!, {"Client1": 3, "Client2": 1, "Server": 8})
+client1 -> server : Disconnect({"Client1": 5, "Client2": 1, "Server": 7})
+server -> client2 : Send(Client1 disconnected, {"Client1": 5, "Client2": 1, "Server": 10})
+@enduml
